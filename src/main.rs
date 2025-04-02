@@ -17,12 +17,13 @@ use std::{
     sync::Arc,
 };
 
-fn make_arrow_writer<T, W>(writer: W) -> (ArrowWriter<W>, Vec<Arc<Field>>)
+fn make_arrow_writer<T, W>(samples: &[T], writer: W) -> (ArrowWriter<W>, Vec<Arc<Field>>)
 where
     T: Serialize + for<'a> Deserialize<'a>,
     W: Write + Seek + Send + 'static,
 {
-    let fields = Vec::<FieldRef>::from_type::<T>(
+    let fields = Vec::<FieldRef>::from_samples(
+        samples,
         TracingOptions::default().enums_without_data_as_strings(true),
     )
     .unwrap();
@@ -44,8 +45,7 @@ where
     let mut data: Vec<u8> = Vec::new();
     {
         let cursor = Cursor::new(data);
-        let make_arrow_writer = make_arrow_writer::<T, _>(cursor);
-        let make_arrow_writer = make_arrow_writer;
+        let make_arrow_writer = make_arrow_writer(items, cursor);
         let (mut writer, fields) = make_arrow_writer;
         let batch = serde_arrow::to_record_batch(&fields, &items).unwrap();
         writer.write(&batch).unwrap();
@@ -63,48 +63,20 @@ where
     serde_arrow::from_record_batch(&batch).unwrap()
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[repr(transparent)]
-/// negative number
-struct N(i64);
-
-impl Default for N {
-    fn default() -> Self {
-        Self(-1)
-    }
-}
-
-impl Serialize for N {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_i64(self.0)
-    }
-}
-
-impl<'de> Deserialize<'de> for N {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let v = i64::deserialize(deserializer)?;
-        println!("{}", v);
-        if v < 0 {
-            Ok(N(v))
-        } else {
-            Err(serde::de::Error::custom("i64 non-negative"))
-        }
-    }
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+enum E {
+    A,
+    B,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct S {
-    n: N,
+    e: Option<E>,
 }
 
 fn main() {
-    let items = vec![S { n: N(-100) }];
+    // let items = vec![S { e: None }]; // using this as the sample will fail
+    let items = vec![S { e: Some(E::A) }]; // using this as the sample will succeed
     let items_read = parquet_round_trip(&items);
     assert_eq!(items, items_read);
 }
