@@ -75,8 +75,8 @@ struct S {
 }
 
 fn main() {
-    // let items = vec![S { e: None }]; // using this as the sample will fail
-    let items = vec![S { e: Some(E::A) }]; // using this as the sample will succeed
+    let items = vec![S { e: None }]; // using this as the sample will fail
+    //let items = vec![S { e: Some(E::A) }]; // using this as the sample will succeed
     let items_read = parquet_round_trip(&items);
     assert_eq!(items, items_read);
 }
